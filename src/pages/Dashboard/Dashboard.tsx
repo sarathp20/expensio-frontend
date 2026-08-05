@@ -1,30 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-    DndContext,
-    closestCenter,
-    PointerSensor,
-    TouchSensor,
-    useSensor,
-    useSensors,
+    DndContext, closestCenter,
+    PointerSensor, TouchSensor,
+    useSensor, useSensors,
     type DragEndEvent,
 } from '@dnd-kit/core'
 import {
-    SortableContext,
-    verticalListSortingStrategy,
-    arrayMove,
+    SortableContext, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable'
+import { deleteExpense as deleteExpenseApi } from '../../api/expenses'
+import { deleteExpense } from '../../store/expenseSlice'
 import { useAppDispatch } from '../../hooks/useAppDispatch'
 import { useAppSelector } from '../../hooks/useAppSelector'
 import { deleteCategory as deleteCategoryApi, getCategories } from '../../api/categories'
 import { deleteCategory, setCategories, setCategoriesError, setCategoriesLoading } from '../../store/categorySlice'
-import { createExpense, getExpenses } from '../../api/expenses'
-import { addExpense, setExpenseLoading, setExpenses } from '../../store/expenseSlice'
+import { getExpenses } from '../../api/expenses'
+import { setExpenseLoading, setExpenses, addPendingExpense, confirmExpense, rejectExpense } from '../../store/expenseSlice'
 import { catagoriseExpense } from '../../api/ai'
+import { createExpense } from '../../api/expenses'
 import { Modal } from '../../components/Modal/Modal'
 import { AddExpenseForm } from '../../components/AddExpenseForm/AddExpenseForm'
 import { CategoryCard } from '../../components/CategoryCard/CategoryCard'
 import { QueueCard } from '../../components/QueueCard/QueueCard'
-import type { Expense, QueueItem } from '../../types'
+import { PinModal } from '../../components/PinModal/PinModal'
+import { openPinModal, logout } from '../../store/authSlice'
+import { DEMO_CATEGORIES, DEMO_EXPENSES } from '../../data/demoData'
+import type { Category, Expense, QueueItem } from '../../types'
 import styles from './Dashboard.module.scss'
 
 const COLORS = [
@@ -41,13 +42,10 @@ function filterByDate(expenses: Expense[], filter: Filter): Expense[] {
         const d = new Date(e.date)
         if (filter === 'today') return d.toDateString() === now.toDateString()
         if (filter === 'week') {
-            const ago = new Date(now)
-            ago.setDate(now.getDate() - 7)
-            return d >= ago
+            const ago = new Date(now); ago.setDate(now.getDate() - 7); return d >= ago
         }
         if (filter === 'month') {
-            return d.getMonth() === now.getMonth() &&
-                d.getFullYear() === now.getFullYear()
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
         }
         return true
     })
@@ -57,10 +55,7 @@ const R = 72
 const CIRCUMFERENCE = 2 * Math.PI * R
 const GAP = 4
 
-function buildSegments(
-    cats: { name: string; total: number; color: string }[],
-    grandTotal: number
-) {
+function buildSegments(cats: { name: string; total: number; color: string }[], grandTotal: number) {
     if (grandTotal === 0) return []
     const active = cats.filter(c => c.total > 0)
     const available = CIRCUMFERENCE - active.length * GAP
@@ -75,29 +70,36 @@ function buildSegments(
 
 export default function Dashboard() {
     const dispatch = useAppDispatch()
-    const { list: categoriesList, loading: catLoading, error: catError } = useAppSelector(s => s.categories)
-    const { list: expensesList } = useAppSelector(s => s.expenses)
+    const isAuthenticated = useAppSelector(s => s.auth.isAuthenticated)
+    const showPinModal = useAppSelector(s => s.auth.showPinModal)
+
+    // Real data from Redux
+    const { list: realCategories, loading: catLoading, error: catError } = useAppSelector(s => s.categories)
+    const { list: realExpenses, pendingIds } = useAppSelector(s => s.expenses)
+
+    // Demo state — in-memory only
+    const [demoCategories, setDemoCategories] = useState(DEMO_CATEGORIES)
+    const [demoExpenses, setDemoExpenses] = useState(DEMO_EXPENSES)
+
+    // Use demo or real data based on auth
+    const categoriesList = isAuthenticated ? realCategories : demoCategories
+    const expensesList = isAuthenticated ? realExpenses : demoExpenses
 
     const [filter, setFilter] = useState<Filter>('today')
     const [queue, setQueue] = useState<QueueItem[]>([])
     const [activeItem, setActiveItem] = useState<QueueItem | null>(null)
+    const [manualOrder, setManualOrder] = useState<string[]>([])
     const [smartInput, setSmartInput] = useState('')
-    const [categoryOrder, setCategoryOrder] = useState<string[]>([])
-    const [updatingItems, setUpdatingItems] = useState<QueueItem[] | null>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    // ── DnD sensors — pointer for desktop, touch for mobile ──
     const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: { distance: 8 }
-        }),
-        useSensor(TouchSensor, {
-            activationConstraint: { delay: 100, tolerance: 8 }
-        })
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 8 } })
     )
 
-    // ── Fetch on mount ────────────────────────────────────
+    // Load real data only when authenticated
     useEffect(() => {
+        if (!isAuthenticated) return
         const load = async () => {
             dispatch(setCategoriesLoading(true))
             const cats = await getCategories()
@@ -105,9 +107,10 @@ export default function Dashboard() {
             dispatch(setCategoriesLoading(false))
         }
         load()
-    }, [])
+    }, [isAuthenticated])
 
     useEffect(() => {
+        if (!isAuthenticated) return
         const load = async () => {
             dispatch(setExpenseLoading(true))
             const exps = await getExpenses()
@@ -115,34 +118,26 @@ export default function Dashboard() {
             dispatch(setExpenseLoading(false))
         }
         load()
-    }, [])
+    }, [isAuthenticated])
 
-    // ── Sync category order when list loads ───────────────
-    useEffect(() => {
-        setCategoryOrder(prev => {
-            if (prev.length === 0) return categoriesList.map(c => c.id)
-            const prevSet = new Set(prev)
-            const newIds = categoriesList
-                .map(c => c.id)
-                .filter(id => !prevSet.has(id))
-            if (newIds.length === 0) return prev
-            return [...prev, ...newIds]
-        })
-    }, [categoriesList])
+    // Sync category order
+    const categoryOrder = useMemo(() => {
+        if (manualOrder.length === 0) return categoriesList.map(c => c.id)
+        const prevSet = new Set(manualOrder)
+        const newIds = categoriesList.map(c => c.id).filter(id => !prevSet.has(id))
+        return newIds.length === 0 ? manualOrder : [...manualOrder, ...newIds]
+    }, [manualOrder, categoriesList])
 
-    // ── Derived data ──────────────────────────────────────
+    // Derived data
     const filtered = filterByDate(expensesList, filter)
 
     const categoriesWithExpenses = categoriesList.map((cat, i) => ({
         ...cat,
         color: COLORS[i % COLORS.length],
         expenses: filtered.filter(e => e.categoryId === cat.id),
-        total: filtered
-            .filter(e => e.categoryId === cat.id)
-            .reduce((sum, e) => sum + e.amount, 0),
+        total: filtered.filter(e => e.categoryId === cat.id).reduce((s, e) => s + e.amount, 0),
     }))
 
-    // Sort by user-defined order
     const sortedCategories = categoryOrder
         .map(id => categoriesWithExpenses.find(c => c.id === id))
         .filter(Boolean) as typeof categoriesWithExpenses
@@ -163,11 +158,12 @@ export default function Dashboard() {
         return 'All time'
     }
 
-    // ── DnD reorder ───────────────────────────────────────
+    // DnD
+    // handleDragEnd — change setCategoryOrder to setManualOrder
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event
         if (over && active.id !== over.id) {
-            setCategoryOrder(prev => {
+            setManualOrder(prev => {
                 const oldIndex = prev.indexOf(String(active.id))
                 const newIndex = prev.indexOf(String(over.id))
                 return arrayMove(prev, oldIndex, newIndex)
@@ -175,13 +171,19 @@ export default function Dashboard() {
         }
     }
 
-    // ── Category delete ───────────────────────────────────
+
     const handleDeleteCategory = async (id: string) => {
+        if (!isAuthenticated) {
+            setDemoCategories(prev => prev.filter(c => c.id !== id))
+            setDemoExpenses(prev => prev.filter(e => e.categoryId !== id))
+            setManualOrder(prev => prev.filter(cid => cid !== id))
+            return
+        }
         try {
             dispatch(setCategoriesLoading(true))
             await deleteCategoryApi(id)
             dispatch(deleteCategory(id))
-            setCategoryOrder(prev => prev.filter(cid => cid !== id))
+            setManualOrder(prev => prev.filter(cid => cid !== id))
         } catch {
             dispatch(setCategoriesError('Error deleting category'))
         } finally {
@@ -189,7 +191,54 @@ export default function Dashboard() {
         }
     }
 
-    // ── Smart input → queue ───────────────────────────────
+    // Delete expense
+    const handleDeleteExpense = async (id: string) => {
+        if (!isAuthenticated) {
+            setDemoExpenses(prev => prev.filter(e => e.id !== id))
+            return
+        }
+        try {
+            await deleteExpenseApi(id)
+            dispatch(deleteExpense(id))
+        } catch (e) {
+            console.log('Error deleting expense', e)
+        }
+    }
+
+    // Optimistic save
+    const handleOptimisticSave = async (
+        description: string, amount: number,
+        categoryId: string, date: string, category: Category
+    ) => {
+        if (!isAuthenticated) {
+            // Demo mode — add to local state only
+            const tempExpense: Expense = {
+                id: `demo-temp-${Date.now()}`,
+                description, amount, categoryId,
+                date: date || new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                category,
+            }
+            setDemoExpenses(prev => [tempExpense, ...prev])
+            return
+        }
+        // Real mode — optimistic update
+        const tempId = `temp_${crypto.randomUUID()}`
+        dispatch(addPendingExpense({
+            id: tempId, description, amount, categoryId,
+            date: date || new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            category,
+        }))
+        try {
+            const response = await createExpense(description, amount, categoryId, date)
+            dispatch(confirmExpense({ tempId, expense: response }))
+        } catch {
+            dispatch(rejectExpense(tempId))
+        }
+    }
+
+    // Smart input
     const handleSmartSubmit = async () => {
         if (!smartInput.trim()) return
         const newItem: QueueItem = {
@@ -201,19 +250,14 @@ export default function Dashboard() {
         setQueue(prev => [...prev, newItem])
         setSmartInput('')
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
-
         try {
             const result = await catagoriseExpense(newItem.rawInput, categoriesList)
             setQueue(prev => prev.map(item =>
-                item.id === newItem.id
-                    ? { ...item, status: 'ready', aiResult: result }
-                    : item
+                item.id === newItem.id ? { ...item, status: 'ready', aiResult: result } : item
             ))
         } catch {
             setQueue(prev => prev.map(item =>
-                item.id === newItem.id
-                    ? { ...item, status: 'error', aiResult: null }
-                    : item
+                item.id === newItem.id ? { ...item, status: 'error', aiResult: null } : item
             ))
         }
     }
@@ -224,7 +268,7 @@ export default function Dashboard() {
         e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'
     }
 
-    // ── Queue actions ─────────────────────────────────────
+    // Queue handlers
     const handleQueueTap = (item: QueueItem) => setActiveItem(item)
     const handleQueueDelete = (id: string) => {
         setQueue(prev => prev.filter(i => i.id !== id))
@@ -232,24 +276,23 @@ export default function Dashboard() {
     }
     const handleDismiss = () => setActiveItem(null)
     const handleDelete = () => {
-        if (activeItem) {
-            setQueue(prev => prev.filter(i => i.id !== activeItem.id))
-            setActiveItem(null)
-        }
+        if (activeItem) { setQueue(prev => prev.filter(i => i.id !== activeItem.id)); setActiveItem(null) }
     }
     const handleSave = () => {
-        if (activeItem) {
-            setQueue(prev => prev.filter(i => i.id !== activeItem.id))
-            setActiveItem(null)
-        }
+        if (activeItem) { setQueue(prev => prev.filter(i => i.id !== activeItem.id)); setActiveItem(null) }
+    }
+    const handleQuickSave = async (item: QueueItem) => {
+        if (!item.aiResult?.category) return
+        setQueue(prev => prev.filter(i => i.id !== item.id))
+        await handleOptimisticSave(
+            item.aiResult.item, item.aiResult.amount,
+            item.aiResult.category.id,
+            new Date().toISOString(),
+            item.aiResult.category
+        )
     }
     const handleManualAdd = () => {
-        setActiveItem({
-            id: crypto.randomUUID(),
-            rawInput: '',
-            status: 'ready',
-            aiResult: null,
-        })
+        setActiveItem({ id: crypto.randomUUID(), rawInput: '', status: 'ready', aiResult: null })
     }
 
     const TABS: { key: Filter; label: string }[] = [
@@ -259,72 +302,53 @@ export default function Dashboard() {
         { key: 'all', label: 'All' },
     ]
 
-    const handleQuickSave = async (item: QueueItem) => {
-        if (!item.aiResult?.category) return
-        try {
-            setQueue(prev => prev.filter(i => i.id !== item.id))
-            setUpdatingItems(prev => {
-                if (Array.isArray(prev)) {
-                    return [...prev, item]
-                } else {
-                    return [item]
-                }
-            })
-            const response = await createExpense(
-                item.aiResult.item,
-                item.aiResult.amount,
-                item.aiResult.category.id
-            )
-            dispatch(addExpense(response))
-        } catch (e) {
-            console.log('Quick save failed', e)
-        } finally {
-            setUpdatingItems(prev => prev && prev.length>1 ? prev.filter(i => i.id !== item.id) : null)
-        }
-    }
-
-    const updatingCategoryIds = useMemo(() => {
-
-        return new Set(
-            updatingItems ? (updatingItems.map(item => item.aiResult?.category?.id)
-                .filter((id): id is string => Boolean(id))) : [])
-    }, [updatingItems])
-
     return (
         <div className={styles.dashboard}>
 
+            {/* Top bar */}
             <div className={styles.topbar}>
                 <span className={styles.logo}>Expensio</span>
-                <button className={styles.addBtn} onClick={handleManualAdd}>+ Add</button>
+                <div className={styles.topbarRight}>
+                    {/* Lock / unlock icon */}
+                    <button
+                        className={styles.lockBtn}
+                        onClick={() => isAuthenticated ? dispatch(logout()) : dispatch(openPinModal())}
+                    >
+                        {isAuthenticated ? '🔓' : '🔒'}
+                    </button>
+                    <button className={styles.addBtn} onClick={handleManualAdd}>+ Add</button>
+                </div>
             </div>
 
+            {/* Demo banner */}
+            {!isAuthenticated && (
+                <div className={styles.demoBanner} onClick={() => dispatch(openPinModal())}>
+                    <span>👀 Demo mode — tap to unlock your data</span>
+                </div>
+            )}
+
+            {/* PIN Modal */}
+            {showPinModal && <PinModal />}
+
+            {/* Donut hero */}
             <div className={styles.hero}>
                 <div className={styles.donutWrap}>
-                    <svg
-                        className={`${styles.donutSvg} ${updatingItems ? styles.loadingDonut : ''}`}
-                        viewBox="0 0 180 180"
-                        aria-hidden="true"
-                    >
+                    <svg className={styles.donutSvg} viewBox="0 0 180 180" aria-hidden="true">
                         <circle cx="90" cy="90" r={R} stroke="rgba(255,255,255,0.06)" strokeWidth="14" fill="none" />
                         {segments.map(seg => (
                             <circle
-                                key={seg.name}
-                                cx="90" cy="90" r={R}
-                                stroke={seg.color}
-                                strokeWidth="14"
-                                fill="none"
+                                key={seg.name} cx="90" cy="90" r={R}
+                                stroke={seg.color} strokeWidth="14" fill="none"
                                 strokeLinecap="round"
                                 strokeDasharray={`${seg.arcLength} ${CIRCUMFERENCE}`}
                                 strokeDashoffset={0}
-                                // The inline transform acts as the starting orientation
                                 transform={`rotate(${seg.rotation - 90}, 90, 90)`}
                             />
                         ))}
                     </svg>
-
                     <div className={styles.donutCenter}>
                         <span className={styles.donutLabel}>Spent</span>
-                        {updatingItems ? <div className={styles.shimmer} style={{ width: '25%' }} /> : <span className={styles.donutAmount}>₹{fmt(grandTotal)}</span>}
+                        <span className={styles.donutAmount}>₹{fmt(grandTotal)}</span>
                         <span className={styles.donutSub}>{periodLabel()}</span>
                     </div>
                 </div>
@@ -341,6 +365,7 @@ export default function Dashboard() {
                 )}
             </div>
 
+            {/* Filter tabs */}
             <div className={styles.filters}>
                 {TABS.map(t => (
                     <button
@@ -353,7 +378,7 @@ export default function Dashboard() {
                 ))}
             </div>
 
-            {/* Category list with DnD */}
+            {/* Category list */}
             <div className={styles.list}>
                 {catLoading && <div className={styles.empty}>Loading...</div>}
                 {catError && <div className={styles.empty}>{catError}</div>}
@@ -363,15 +388,8 @@ export default function Dashboard() {
                     </div>
                 )}
                 {!catLoading && (
-                    <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <SortableContext
-                            items={categoryOrder}
-                            strategy={verticalListSortingStrategy}
-                        >
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={categoryOrder} strategy={verticalListSortingStrategy}>
                             {sortedCategories.map(cat => (
                                 <CategoryCard
                                     key={cat.id}
@@ -382,7 +400,8 @@ export default function Dashboard() {
                                     color={cat.color}
                                     expenses={cat.expenses}
                                     onDelete={handleDeleteCategory}
-                                    isUpdating={updatingCategoryIds.has(cat.id)}
+                                    onDeleteExpense={handleDeleteExpense}
+                                    pendingIds={isAuthenticated ? pendingIds : []}
                                 />
                             ))}
                         </SortableContext>
@@ -390,13 +409,12 @@ export default function Dashboard() {
                 )}
             </div>
 
-            {/* Queue — floats above input */}
+            {/* Queue */}
             {queue.length > 0 && (
                 <div className={styles.queueSection}>
-                    {[...queue].map(item => (
+                    {queue.map(item => (
                         <QueueCard
-                            key={item.id}
-                            item={item}
+                            key={item.id} item={item}
                             onTap={handleQueueTap}
                             onDelete={handleQueueDelete}
                             onQuickSave={handleQuickSave}
@@ -405,40 +423,36 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Active item form */}
+            {/* Active form */}
             {activeItem && (
                 <Modal onClose={handleDismiss}>
                     <AddExpenseForm
+                        key={activeItem?.id}
                         onClose={handleSave}
                         onDelete={handleDelete}
                         isLoading={activeItem.status === 'loading'}
                         aiResults={activeItem.aiResult}
                         categories={categoriesList}
+                        onSave={handleOptimisticSave}
                     />
                 </Modal>
             )}
 
+            {/* Bottom input */}
             <div className={styles.bottomBar}>
                 <div className={styles.inputRow}>
                     <textarea
                         ref={textareaRef}
                         className={styles.inputField}
-                        placeholder="What did you spend on?"
+                        placeholder={isAuthenticated ? 'What did you spend on?' : 'Try the AI — type an expense...'}
                         value={smartInput}
                         onChange={handleInput}
                         onKeyDown={e => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault()
-                                handleSmartSubmit()
-                            }
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSmartSubmit() }
                         }}
                         rows={1}
                     />
-                    <button
-                        className={styles.aiBtn}
-                        onClick={handleSmartSubmit}
-                        disabled={!smartInput.trim()}
-                    >
+                    <button className={styles.aiBtn} onClick={handleSmartSubmit} disabled={!smartInput.trim()}>
                         <i className="ti ti-sparkles" />
                         <span>Smart</span>
                     </button>

@@ -299,3 +299,47 @@
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+// ── Top bar right side ─────────────────────────────────
+.topbarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lockBtn {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background 0.15s;
+
+  &:hover { background: var(--surface2); }
+}
+
+// ── Demo banner ────────────────────────────────────────
+.demoBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 0.5px solid var(--accent-border);
+  cursor: pointer;
+  transition: background 0.15s;
+
+  span {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.3px;
+  }
+
+  &:hover { background: rgba(99, 102, 241, 0.14); }
+}
