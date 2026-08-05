@@ -61,3 +61,17 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
     touch-action: manipulation;
   }
 }
+
+@media (max-width: 768px) {
+  body::before {
+    content: 'MOBILE';
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: red;
+    color: white;
+    font-size: 20px;
+    z-index: 9999;
+    padding: 4px 8px;
+  }
+}
