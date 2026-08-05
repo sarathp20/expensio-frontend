@@ -42,7 +42,7 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
 /* Mobile — larger sizes */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   :root {
     --font-scale: 1.2;
   }
@@ -55,24 +55,10 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   input, textarea, select {
     font-size: 16px !important;
     touch-action: manipulation;
-  }
-}
-
-@media (max-width: 768px) {
-  body::before {
-    content: 'MOBILE';
-    position: fixed;
-    top: 0;
-    left: 0;
-    background: red;
-    color: white;
-    font-size: 20px;
-    z-index: 9999;
-    padding: 4px 8px;
   }
 }
 

@@ -345,7 +345,7 @@
 .donutAmount {
   font-size: 26px;
 
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     font-size: 36px;
   }
 }
@@ -353,7 +353,7 @@
 .donutLabel, .donutSub, .legendName, .inputHint {
   font-size: 10px;
 
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     font-size: 13px;
   }
 }
@@ -362,7 +362,7 @@
   font-size: 11px;
   padding: 0 14px 10px;
 
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     font-size: 13px;
     padding: 0 16px 12px;
   }
@@ -372,7 +372,7 @@
   font-size: 13px;
   min-height: 46px;
 
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     font-size: 16px;
     min-height: 52px;
   }
