@@ -5,6 +5,13 @@
   background: var(--bg);
   padding-bottom: 110px;
   overflow-x: hidden;
+  max-width: 480px;
+  margin: 0 auto;
+
+  @media (max-width: 1024px) {
+    max-width: 100%;  // ← full width on mobile
+    margin: 0;
+  }
 }
 
 @keyframes spin {
@@ -202,6 +209,15 @@
   pointer-events: none;
   max-height: 60vh;
   overflow: hidden;
+  max-width: 480px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  @media (max-width: 1024px) {
+    max-width: 100%;
+    left: 0;
+    transform: none;
+  }
 }
 
 // ── Bottom bar ────────────────────────────────────────────
@@ -216,6 +232,15 @@
   padding: 12px 16px 20px;
   /* Add safe area for iPhone notch */
   padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  max-width: 480px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  @media (max-width: 1024px) {
+    max-width: 100%;
+    left: 0;
+    transform: none;
+  }
 }
 
 .inputRow {
