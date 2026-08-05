@@ -40,3 +40,24 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+/* Mobile — larger sizes */
+@media (max-width: 768px) {
+  :root {
+    --font-scale: 1.2;
+  }
+}
+
+/* Desktop — current sizes unchanged */
+@media (min-width: 769px) {
+  :root {
+    --font-scale: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+    touch-action: manipulation;
+  }
+}
