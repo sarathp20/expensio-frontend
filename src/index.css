@@ -75,3 +75,8 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
     padding: 4px 8px;
   }
 }
+
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+}
