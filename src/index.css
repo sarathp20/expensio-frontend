@@ -66,3 +66,14 @@ html, body {
   width: 100%;
   overflow-x: hidden;
 }
+
+/* Prevent ghost clicks and double-tap zoom globally */
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button, [role="button"] {
+  touch-action: manipulation;
+  cursor: pointer;
+}
