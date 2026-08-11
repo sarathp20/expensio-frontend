@@ -241,23 +241,39 @@ export default function Dashboard() {
     // Smart input
     const handleSmartSubmit = async () => {
         if (!smartInput.trim()) return
-        const newItem: QueueItem = {
+
+        // Single queue item for the whole input while AI processes
+        const tempItem: QueueItem = {
             id: crypto.randomUUID(),
             rawInput: smartInput.trim(),
             status: 'loading',
             aiResult: null,
         }
-        setQueue(prev => [...prev, newItem])
+
+        setQueue(prev => [...prev, tempItem])
         setSmartInput('')
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
         try {
-            const result = await catagoriseExpense(newItem.rawInput, categoriesList)
-            setQueue(prev => prev.map(item =>
-                item.id === newItem.id ? { ...item, status: 'ready', aiResult: result } : item
-            ))
+            const results = await catagoriseExpense(tempItem.rawInput, categoriesList)
+
+            // Remove the temp loading card
+            setQueue(prev => prev.filter(i => i.id !== tempItem.id))
+
+            // Add one card per identified expense
+            const newItems: QueueItem[] = results.map(result => ({
+                id: crypto.randomUUID(),
+                rawInput: result.item,
+                status: 'ready' as const,
+                aiResult: result,
+            }))
+
+            setQueue(prev => [...prev, ...newItems])
         } catch {
-            setQueue(prev => prev.map(item =>
-                item.id === newItem.id ? { ...item, status: 'error', aiResult: null } : item
+            setQueue(prev => prev.map(i =>
+                i.id === tempItem.id
+                    ? { ...i, status: 'error' }
+                    : i
             ))
         }
     }
@@ -454,7 +470,7 @@ export default function Dashboard() {
                     />
                     <button className={styles.aiBtn} onClick={handleSmartSubmit} disabled={!smartInput.trim()}>
                         <i className="ti ti-sparkles" />
-                        <span>Smart</span>
+                        <span>Add</span>
                     </button>
                 </div>
                 <div className={styles.inputHint}>Long press to delete · Drag ≡ to reorder</div>
