@@ -1,11 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
+/* ── Reset ─────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── CSS Variables ──────────────────────────────────────── */
 :root {
   --bg:            #080810;
   --surface:       #0f0f1a;
@@ -25,55 +42,39 @@
   --font-mono:     'DM Mono', 'Menlo', monospace;
 }
 
-html, body, #root {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
+/* ── Interactive elements ───────────────────────────────── */
+button, [role="button"] {
   font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-button { font-family: var(--font-sans); cursor: pointer; }
-input, textarea, select { font-family: var(--font-sans); color: var(--text); }
-input::placeholder, textarea::placeholder { color: var(--text3); }
-
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
-
-/* Mobile — larger sizes */
-@media (max-width: 1024px) {
-  :root {
-    --font-scale: 1.2;
-  }
+input, textarea, select {
+  font-family: var(--font-sans);
+  color: var(--text);
+  touch-action: manipulation;
 }
 
-/* Desktop — current sizes unchanged */
-@media (min-width: 769px) {
-  :root {
-    --font-scale: 1;
-  }
+input::placeholder, textarea::placeholder {
+  color: var(--text3);
 }
 
+/* Prevent iOS zoom on input focus */
 @media (max-width: 1024px) {
   input, textarea, select {
     font-size: 16px !important;
-    touch-action: manipulation;
   }
 }
 
-html, body {
-  width: 100%;
-  overflow-x: hidden;
+/* ── SVG — never block touch or override transforms ─────── */
+svg, svg * {
+  touch-action: auto;
 }
 
-/* Prevent ghost clicks and double-tap zoom globally */
-* {
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-button, [role="button"] {
-  touch-action: manipulation;
-  cursor: pointer;
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
 }

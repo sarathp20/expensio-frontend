@@ -85,7 +85,7 @@ export default function Dashboard() {
     const categoriesList = isAuthenticated ? realCategories : demoCategories
     const expensesList = isAuthenticated ? realExpenses : demoExpenses
 
-    const [filter, setFilter] = useState<Filter>('today')
+    const [filter, setFilter] = useState<Filter>('month')
     const [queue, setQueue] = useState<QueueItem[]>([])
     const [activeItem, setActiveItem] = useState<QueueItem | null>(null)
     const [manualOrder, setManualOrder] = useState<string[]>([])
@@ -296,9 +296,9 @@ export default function Dashboard() {
     }
 
     const TABS: { key: Filter; label: string }[] = [
+        { key: 'month', label: 'Month' },
         { key: 'today', label: 'Today' },
         { key: 'week', label: 'Week' },
-        { key: 'month', label: 'Month' },
         { key: 'all', label: 'All' },
     ]
 
@@ -333,7 +333,7 @@ export default function Dashboard() {
             {/* Donut hero */}
             <div className={styles.hero}>
                 <div className={styles.donutWrap}>
-                    <svg className={styles.donutSvg} viewBox="0 0 180 180" aria-hidden="true">
+                    <svg className={`${styles.donutSvg} ${isAuthenticated && pendingIds.length > 0 ? styles.spinning : ''}`} viewBox="0 0 180 180" aria-hidden="true">
                         <circle cx="90" cy="90" r={R} stroke="rgba(255,255,255,0.06)" strokeWidth="14" fill="none" />
                         {segments.map(seg => (
                             <circle

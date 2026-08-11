@@ -376,3 +376,12 @@
   font-size: 13px;
   min-height: 46px;
 }
+
+.spinning {
+  animation: donutSpin 1.5s linear infinite;
+}
+
+@keyframes donutSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
